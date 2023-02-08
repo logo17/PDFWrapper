@@ -1,16 +1,14 @@
 package com.example.pdftest1
 
-import android.Manifest
-import android.content.pm.PackageManager
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.navigateUp
@@ -20,20 +18,10 @@ import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDDocumentCatalog
 import com.tom_roush.pdfbox.pdmodel.interactive.form.PDAcroForm
 import com.tom_roush.pdfbox.pdmodel.interactive.form.PDTextField
+import java.io.File
 import java.io.IOException
 
 class MainActivity : AppCompatActivity() {
-
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted: Boolean ->
-        if (isGranted) {
-            Log.i("Permission: ", "Granted")
-            generateDoc()
-        } else {
-            Log.i("Permission: ", "Denied")
-        }
-    }
 
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
@@ -50,8 +38,14 @@ class MainActivity : AppCompatActivity() {
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
 
-        binding.fab.setOnClickListener { view ->
-            requestPermission()
+        binding.fab.setOnClickListener {
+            generateDoc()?.let {
+                val intent = Intent(Intent.ACTION_SEND)
+                intent.putExtra(Intent.EXTRA_STREAM, it)
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                intent.type = "application/pdf"
+                startActivity(Intent.createChooser(intent, "Share PDF File"))
+            }
         }
     }
 
@@ -77,9 +71,7 @@ class MainActivity : AppCompatActivity() {
                 || super.onSupportNavigateUp()
     }
 
-    private fun generateDoc(): String {
-        var path = ""
-
+    private fun generateDoc(): Uri? {
         try {
             // Load the document and get the AcroForm
             val document: PDDocument =
@@ -92,34 +84,15 @@ class MainActivity : AppCompatActivity() {
             field.defaultAppearance = acroForm.defaultAppearance
             field.value = "TEST"
             field.isReadOnly = true
-
-            path =
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath + "/Test21.pdf"
-            document.save(path)
+            val baseDir = File(this.filesDir, "PDFs")
+            if (!baseDir.exists()) baseDir.mkdir()
+            val newPdfFile = File(baseDir, "TEST22.pdf")
+            document.save(newPdfFile)
             document.close()
+            return FileProvider.getUriForFile(this, "com.example.fileprovider", newPdfFile)
         } catch (e: IOException) {
             Log.e("PdfBox-Android-Sample", "Exception thrown while filling form fields", e)
         }
-        return path
-    }
-
-    private fun requestPermission() {
-        when {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED -> {
-                generateDoc()
-            }
-            ActivityCompat.shouldShowRequestPermissionRationale(
-                this,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) -> {
-
-            }
-            else -> {
-                requestPermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            }
-        }
+        return null
     }
 }
